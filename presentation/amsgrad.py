@@ -2,7 +2,7 @@
 from torch.optim.optimizer import Optimizer
 import torch
 from torch.autograd import Variable
-
+import math
 class Amsgrad(Optimizer):
     """Implements Amsgrad algorithm.
 
@@ -23,7 +23,7 @@ class Amsgrad(Optimizer):
     """
 
     # constructor to initialize the hyper-parameters
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.99), eps=1e-8,
                  weight_decay=0):
         defaults = dict(lr=lr, betas=betas, eps=eps,
                         weight_decay=weight_decay)
@@ -71,14 +71,19 @@ class Amsgrad(Optimizer):
                 exp_avg.mul_(beta1).add_(1 - beta1, grad)
                 exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
                 
-                # Stores the maximum of previous maximum exponential average of squared gradients and current value
+                # Calculate the maximum between the previous maximum exponential average of squared gradients and current value
                 exp_avg_sq_maximum = torch.max(exp_avg_sq_maximum,exp_avg_sq)
+
+                # Store the maximum
+                state['exp_avg_sq_maximum'] = exp_avg_sq_maximum
                 
                 
                 denom = exp_avg_sq_maximum.sqrt().add_(group['eps'])
 
-                step_size = group['lr']
-
+                bias_correction1 = 1 - beta1 ** state['step']
+                bias_correction2 = 1 - beta2 ** state['step']
+                step_size = group['lr']i#*math.sqrt(bias_correction2) / bias_correction1
+                
                 # Performs update on parameters of the network based on gradients
                 p.data.addcdiv_(-step_size, exp_avg, denom)
 
