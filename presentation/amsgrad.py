@@ -82,7 +82,7 @@ class Amsgrad(Optimizer):
 
                 bias_correction1 = 1 - beta1 ** state['step']
                 bias_correction2 = 1 - beta2 ** state['step']
-                step_size = group['lr']i#*math.sqrt(bias_correction2) / bias_correction1
+                step_size = group['lr'] #*math.sqrt(bias_correction2) / bias_correction1
                 
                 # Performs update on parameters of the network based on gradients
                 p.data.addcdiv_(-step_size, exp_avg, denom)
