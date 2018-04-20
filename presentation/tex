@@ -1,0 +1,371 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%2345678901234567890123456789012345678901234567890123456789012345678901234567890
+%        1         2         3         4         5         6         7         8
+
+\documentclass[letterpaper, 10 pt, conference]{ieeeconf}  % Comment this line out if you need a4paper
+
+%\documentclass[a4paper, 10pt, conference]{ieeeconf}      % Use this line for a4 paper
+
+\IEEEoverridecommandlockouts                              % This command is only needed if 
+                                                          % you want to use the \thanks command
+
+\overrideIEEEmargins                                      % Needed to meet printer requirements.
+
+%In case you encounter the following error:
+%Error 1010 The PDF file may be corrupt (unable to open PDF file) OR
+%Error 1000 An error occurred while parsing a contents stream. Unable to analyze the PDF file.
+%This is a known problem with pdfLaTeX conversion filter. The file cannot be opened with acrobat reader
+%Please use one of the alternatives below to circumvent this error by uncommenting one or the other
+%\pdfobjcompresslevel=0
+%\pdfminorversion=4
+
+% See the \addtolength command later in the file to balance the column lengths
+% on the last page of the document
+
+% The following packages can be found on http:\\www.ctan.org
+\usepackage{graphicx} % for pdf, bitmapped graphics files
+%\usepackage{epsfig} % for postscript graphics files
+%\usepackage{mathptmx} % assumes new font selection scheme installed
+%\usepackage{times} % assumes new font selection scheme installed
+\usepackage{amsmath} % assumes amsmath package installed
+\usepackage{amssymb}  % assumes amsmath package installed
+
+% For CNN Architecture
+\usepackage{graphicx}
+\usepackage{color}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{pgf-umlsd}
+\usepackage{ifthen}
+
+
+\title{\LARGE \bf On the Convergence of ADAM and Beyond*}
+
+
+\author{Barleen Kaur$^{1}$, Jacob Shnaidman$^{2}$ and Hamed Layeghi$^3$% <-this % stops a space
+\thanks{*This work was not supported by any organization}% <-this % stops a space
+\thanks{$^{1}$Barleen Kaur (Student ID:) is with Department of Computer Science,
+        McGill University,
+        Montreal, QC, Canada
+        {\tt\small barleen.kaur@mail.mcgill.ca}}%
+\thanks{$^{2}$Jacob Shnaidman (Student ID:) is with the Department of Electrical Engineering, McGill University,
+        Montreal, QC, Canada
+        {\tt\small jacob.shnaidman@mail.mcgill.ca}}%
+\thanks{$^{3}$Hamed Layeghi (Student ID:260524499) with the Department of Electrical Engineering, McGill University,
+        Montreal, QC, Canada
+        {\tt\small hamedl@cim.mcgill.ca}}%
+}
+
+
+\begin{document}
+
+
+
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+
+The goal should be to identify which parts of the contribution can be reproduced, and at what cost in terms of
+resources (computation, time, people, development effort, communication with the authors). Essentially, think
+of your role as an inspector verifying the validity of the experimental results and conclusions of the paper. For Track 3, a thorough report on implementation goals, discussion and challenges. Prepare and publish an executive summary (roughly 1 page) of your full report.
+
+\
+\
+
+Specify which part of the paper you focus for reproducing. If the paper is reproducible, then discuss what are the major points to remember while reproducing this paper. Comment about any difficulty in reproducing and how can authors of the paper help you avoid that difficulty. If the paper is not reproducible, criticize why that is the case and what is missing in the paper description.
+
+\
+\
+
+*** For all tracks, the most important thing we are looking for is for you to clearly explain the reasons you ran each experiment. Simply tuning hyperparameters at random is not enough. Why did you try a particular experiment? What hypotheses did you have? Were they confirmed or rejected? Did you have to modify the experiments due to compute limitations? What other factors played a role in your decision? This also applies to the design decisions you made when reproducing the paper, in Track 3. Which experiments are the most important, and why? ***
+
+
+
+\end{abstract}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{INTRODUCTION}
+In this report, we will try to reproduce the results from \cite{reddi2018convergence}.
+The paper describes an important weakness of ADAM and other optimization algorithms such as \textsc{Adagrad}, \textsc{RMSprop}, \textsc{Adadelta} that sometimes the exponential moving average method used in these algorithms leads to divergence or convergence to a wrong minimum. This could happen especially when there are informative gradients that happen rarely.
+
+
+\section{PROBLEMS WITH ADAM}
+
+\subsection{Online Optimization Problem}
+The paper considers an online optimization setting with full information feedback. In this setting, optimization parameter $x_t\in\mathcal{F}$ where $\mathcal{F}\subset \mathbb{R}^d$ is the set of feasible points. There exists a loss function $f_t(x_t)$ for which the following regret function is introduced after a set of $T$ steps: 
+\begin{align}
+    R_T = \sum_{t=1}^T f_t(x_t) - \min_{x\in\mathcal{F}} \sum_{t=1}^T f_t(x)
+\end{align}
+
+It is assumed that $\mathcal{F}$ has bounded diameter and $\|\nabla f_t(x)\|$ is bounded for all $t\in[T]$ and all $x\in\mathcal{F}$.
+\subsection{Example}
+Consider the following loss function
+\begin{align}
+    f_t(x) =\begin{cases}
+    Cx, & \text{for $t$ mod 3 = 1}\\
+    -x, & \text{otherwise}\\
+    \end{cases}
+\end{align}
+where $\mathcal{F}=[-1,1]$
+
+For large enough $T$, we see the regret is given by
+\begin{align}\begin{split}
+    \sum_{t=1}^T f_t(x) &= f_1(x)+f_2(x)+\ldots+f_T(x)\\
+    & = Cx-x-x+Cx-x-x+\ldots\\
+    & \simeq \frac T3(C-2)x
+\end{split}\end{align}
+
+It can be seen that for $C>2$, $x=-1$ is a minimizer for the total loss. The regret is now given by
+\begin{align}\label{equ:synthRegret}
+    R_T(x) \simeq \frac T3(C-2)(x+1), \quad x\in [-1,1]
+\end{align}
+%
+which has a minimum at $x=-1$.
+This example illustrates an underlying problem with ADAM's convergence theorem in \cite{kingma2014adam}. ADAM, for this problem converges to $x=1$ which creates the maximum regret and by (\ref{equ:synthRegret}) the average regret, $R_T/T$, does not go to zero.
+Figure \ref{fig:synthResults} shows the results obtained in the main paper \cite{reddi2018convergence}.
+\begin{figure*}[t]
+	\begin{center}
+		\includegraphics[width=1\textwidth]{Pictures/synthExample.jpg}  % The printed column width is 8.4 cm.
+		\caption{Results for Synthetic Example \cite{reddi2018convergence}}
+		\label{fig:synthResults}
+	\end{center}
+\end{figure*}
+
+\section{Implementation Goals}
+
+** Make sure to talk about why we ran each experiment** 
+
+\
+\
+
+The primary goal of our project is to reproduce the Amsgrad algorithm and the performance comparisons between Adam and Amsgrad. To do this, we set out to reproduce the performance of Amsgrad and Adam on the deterministic and stochastic synthetic experiments, logistic regression example, feed fordward neural network example, and the convolutional neural network example.
+
+To ensure that the central claims of the paper are reproducible, we reproduced both synthetic experiments. These experiments should show that Amsgrad converges to -1 and asymptotically approaches 0 average regret, while Adam fails to converge to -1 and does not approach 0 average regret. Because both the deterministic and stochastic synthetic experiments are exemplary of different theorems produced within the paper, they were both important to reproduce. 
+
+\
+\
+
+We also aim to reproduce the other graphs shown in figure 2 of the paper, since they make substantial claims about the performance of Amsgrad in comparison to Adam in many different contexts. They claim that it has better performance than Adam not only in classification using logistic regression, but also using feed-forward neural networks and convolutional neural networks. It's also important to be able to be able to reproduce this performance given the information about the hyper-parameters they reported. 
+
+
+\
+\
+****** Expand me *******
+We chose not to focus on the extension specified in this paper
+*******
+
+\section{Discussion}
+
+\subsection{Deterministic Synthetic Experiment}
+The first synthetic experiment was replicated with 
+\begin{align}
+    f_t(x) =\begin{cases}
+    1010x, & \text{for $t$ mod 3 = 1}\\
+    -10x, & \text{otherwise}\\
+    \end{cases}
+\end{align}
+as seen in the experiments section of the paper. We clamped the output of the x variable between -1 and 1 as prescribed. We used the described beta values of $\beta_1$ = 0.9 and $\beta_2$ = 0.99. For epsilon, the value was not mentioned in the paper, so a value of $10^{-8}$ was used. We varied the learning rate between $10^{-5}$ and 1 and tried with and without a decaying learning rate of $\frac{\alpha}{\sqrt{t}}$ for each iteration $t$. Finally, the learning rate used to reproduce the graphical results shown in *NEED TO INSERT IMAGE* was $\alpha = 1$ with an adjusted learning rate $\frac{\alpha}{\sqrt{t}}$
+
+\subsection{Stochastic Synthetic Experiment}
+The second synthetic experiment was replicated with 
+
+\begin{align}
+    f_t(x) =\begin{cases}
+    1010x, & \text{with probability 0.01}\\
+    -10x, & \text{otherwise}\\
+    \end{cases}
+\end{align}
+
+For this, we used the same betas as in the first synthetic example ($\beta_1$ = 0.9 and $\beta_2$ = 0.99). Epsilon remained at $10^{-8}$. Similar methodology was used to reproduce the graphical results in *INSERT REFERENCE TO IMAGE*. This was done with $\alpha = 5\times10^{-4}$ with a static learning rate. A small learning rate was important to be able to reproduce the graph, since higher learning rates may diverge in the wrong direction. 
+\subsection{Logistic Regression}
+Logistic regression is used as a basic classifier for MNIST dataset to show the effectiveness of AMSGRAD over ADAM. Figure \ref{fig:LRHPtuneAMSGRAD} shows the result of hyperparameter tuning method used.
+
+\begin{figure}
+	\begin{center}
+		\includegraphics[width=0.5\textwidth]{Pictures/logregHP100.png}  % The printed column width is 8.4 cm.
+		\caption{Hyper-parameter Tuning for Logistic Regression using \textsc{AMSGrad} with 5000 training points and 1000 validation points and 100 epochs}
+		\label{fig:LRHPtuneAMSGRAD}
+	\end{center}
+\end{figure}
+
+\subsection{Feed-Forward Neural Network}
+
+The feed forward neural network experiment aimed to classify MNIST dataset images which are of size $28x28$. The neural network was described quite specifically; it uses a single fully connected hidden layer with 100 rectified linear units. This implies an input layer of 784 units and an output layer of 10 units. The $\beta_1$ used in the paper was fixed to 0.9 while $\beta_2$ was found using a grid search between 0.99 to 0.999 with batch sizes of 128. The learning rate was specified to be some constant $\alpha_t$. The batch size was left unspecified, however it was implied that the hyper-parameters were similar to the logistic regression experiment which used a batch size of 128. We inferred this to mean that they used a batch size of 128. 
+
+\\
+
+We found that the best validation performance was with a value of $\alpha_t = 3.16 \times 10^{-4}$ and $\beta_2 = 0.999$ as shown in Figure \ref{fig:nnResults}. Although we computed a grid search of the hyper parameters as recommended, the grid search proved computationally expensive, and we were unable to replicate the performance of either optimizer completely. Although the training loss was not as low as in the paper, we were able to reproduce the relative performance of Amsgrad compared to Adam. 
+
+
+\begin{figure*}[t]
+	\begin{center}
+		\includegraphics[width=9cm, height=4cm]{Pictures/NN_Train_Loss.png}  % The printed column width is 8.4 cm.
+		\caption{Results for Feed-Forward Neural Network}
+		\label{fig:nnResults}
+	\end{center}
+\end{figure*}
+
+\subsection{CIFARNET}
+\begin{figure*}
+\begin{center}
+\noindent\resizebox{0.7\textwidth}{!}{
+	\begin{tikzpicture}
+		\draw[use as bounding box, transparent] (-1.8,-1.8) rectangle (9.2, 3.2);
+
+		% Define the macro.
+		% 1st argument: Height and width of the layer rectangle slice.
+		% 2nd argument: Depth of the layer slice
+		% 3rd argument: X Offset --> use it to offset layers from previously drawn layers.
+		% 4th argument: Options for filldraw.
+		% 5th argument: Text to be placed below this layer.
+		% 6th argument: Y Offset --> Use it when an output needs to be fed to multiple layers that are on the same X offset.
+
+		\newcommand{\networkLayer}[6]{
+			\def\a{#1} % Used to distinguish input resolution for current layer.
+			\def\b{0.02}
+			\def\c{#2} % Width of the cube to distinguish number of input channels for current layer.
+			\def\t{#3} % X offset for current layer.
+			\ifthenelse {\equal{#6} {}} {\def\y{0}} {\def\y{#6}} % Y offset for current layer.
+
+			% Draw the layer body.
+			\draw[line width=0.25mm](\c+\t,0,0) -- (\c+\t,\a,0) -- (\t,\a,0);                                                      % back plane
+			\draw[line width=0.25mm](\t,0,\a) -- (\c+\t,0,\a) node[midway,below] {#5} -- (\c+\t,\a,\a) -- (\t,\a,\a) -- (\t,0,\a); % front plane
+			\draw[line width=0.25mm](\c+\t,0,0) -- (\c+\t,0,\a);
+			\draw[line width=0.25mm](\c+\t,\a,0) -- (\c+\t,\a,\a);
+			\draw[line width=0.25mm](\t,\a,0) -- (\t,\a,\a);
+
+			% Recolor visible surfaces
+			\filldraw[#4] (\t+\b,\b,\a) -- (\c+\t-\b,\b,\a) -- (\c+\t-\b,\a-\b,\a) -- (\t+\b,\a-\b,\a) -- (\t+\b,\b,\a); % front plane
+			\filldraw[#4] (\t+\b,\a,\a-\b) -- (\c+\t-\b,\a,\a-\b) -- (\c+\t-\b,\a,\b) -- (\t+\b,\a,\b);
+
+			% Colored slice.
+			\ifthenelse {\equal{#4} {}}
+			{} % Do not draw colored slice if #4 is blank.
+			{\filldraw[#4] (\c+\t,\b,\a-\b) -- (\c+\t,\b,\b) -- (\c+\t,\a-\b,\b) -- (\c+\t,\a-\b,\a-\b);} % Else, draw a colored slice.
+		}
+
+		% INPUT
+		\node[] (input image) at (-3.75,0.5) {\includegraphics[height=30mm]{Pictures/cifar-10.png}};
+		\networkLayer{3.0}{0.03}{-0.5}{color=gray!80}{}
+
+		% ENCODER
+		\networkLayer{3.0}{0.4}{0.0}{color=white}{conv}{}    % S1
+		\networkLayer{3.0}{0.4}{1.6}{color=green}{\textbox{batch\\norm}}{}        % S2
+		\networkLayer{2.5}{0.4}{3.6}{color=white}{conv}{}    % S1
+		%\networkLayer{2.5}{0.2}{4.9}{color=white}{}{}        % S2
+		\networkLayer{2.0}{0.4}{5.3}{color=white}{fc}{}    % S1
+		\networkLayer{2.0}{0.4}{6.8}{color=cyan}{dropout}{}        % S2
+		\networkLayer{1.5}{0.8}{8.3}{color=white}{fc}{}    % S1
+		%\networkLayer{1.5}{0.8}{7.2}{color=white}{}{}        % S2
+		%\networkLayer{1.0}{1.5}{8.1}{color=white}{FC}{}    % S1
+		%\networkLayer{1.0}{1.5}{9.7}{color=white}{}{}        % S2
+
+		% DECODER
+		%\networkLayer{1.0}{1.5}{7.7}{color=white}{deconv}{}   % S1
+		%\networkLayer{1.0}{1.5}{9.3}{color=white}{}{}         % S2
+		%\networkLayer{1.5}{0.8}{11.2}{color=white}{deconv}{}  % S1
+		%\networkLayer{1.5}{0.8}{12.1}{color=white}{}{}        % S2
+		%\networkLayer{2.0}{0.4}{13.3}{color=white}{}{}        % S1
+		%\networkLayer{2.0}{0.4}{13.8}{color=white}{}{}        % S2
+		%\networkLayer{2.5}{0.2}{14.8}{color=white}{}{}        % S1
+		%\networkLayer{2.5}{0.2}{15.1}{color=white}{}{}        % S2
+		%\networkLayer{3.0}{0.1}{15.8}{color=white}{}{}        % S1
+		%\networkLayer{3.0}{0.1}{16}{color=white}{}{}          % S2
+
+		% OUTPUT
+		\networkLayer{1.0}{0.25}{11}{color=red!40}{Output}{}          % Pixelwise segmentation with classes.
+		%\node[] (output image) at (18,0.5) {\includegraphics[height=30mm]{vermeer.jpg}};
+
+
+	\end{tikzpicture}
+	}
+	
+\end{center}
+
+	\caption{CNN architecture for CIFARNET}
+	\label{fig:cnn}
+\end{figure*}
+\section{Challenges}
+
+
+\subsection{Implementation}
+
+The implementation of the Amsgrad algorithm was fairly straightforward since it is not very different from the Adam algorithm. Initially, we had made the mistake of not storing the maximum moving average of the squared gradients properly. This led to an implementation that was very similar to Adam. At first glance, it seemed like the performance ran fine with logistic regression and our neural network example, so we assumed we had a bug in our reproduction of the synthetic example. After some time, we noticed the bug, and started over. For future reproductions, the implementation should be checked first with the synthetic example to verify that it works. 
+
+\subsection{Synthetic Experiments}
+
+The synthetic experiments were very sensitive to the adjusted learning rate. The proofs in the paper assumed an adjusted learning rate of $\frac{\alpha}{\sqrt{t}}$, however the synthetic experiments did not specify their learning rates. Many learning rates had to be tried and manually verified to see whether or not it could reproduce the graphs shown in the paper.
+
+\
+
+Another challenge that was faced in trying to reproduce the graphs for the synthetic experiments was  that the horizontal axis of the graphs needed to be logarithmically scaled in the exact way as shown in the paper to appear non-noisy. This may be in part because the learning rate was not specified in the paper to reproduce these graphs, which may have resulted in a optimizer with higher variance than what the authors had when they produced their graphs originally. In larger part, this can be attributed to the frequent shifts in the magnitude and direction of the gradient of the loss function. Future reproductions of this paper should be aware of this detail. 
+
+
+\subsection{Feed-Forward Neural Network}
+
+The feed forward neural network was specified almost in full detail with instructions on how to attain the unspecified hyper-parameters. Unfortunately these hyper-parameters proved very costly to cross validate, and although much time was spent on cross validation, it seems that attaining a training loss as low as 0.01 after only 5000 iterations proved very difficult. 
+
+
+\section{CONCLUSIONS}
+
+A conclusion section is not required. Although a conclusion may review the main points of the paper, do not replicate the abstract as the conclusion. A conclusion might elaborate on the importance of the work or suggest applications and extensions. 
+
+
+\section{Summary of Contributions}
+
+Jacob Shnaidman (260655643) - Helped with implementation of Algorithm, Created Visualizations for presentation, Reproduced Synthetic Experiments, Helped Reproduce Neural Network.
+
+Hamed Layeghi (260524499) helped with analysis of Synthetic Problem, Coding and Simulation of Logistic Regresion, helped with hyperparameter tuning of all experiments, wrote main part of introduction and conclusion.
+
+All three members contributed in writing the report.
+
+``We hereby state that all the work presented in this report is that of the authors.''
+\addtolength{\textheight}{-12cm}   % This command serves to balance the column lengths
+                                  % on the last page of the document manually. It shortens
+                                  % the textheight of the last page by a suitable amount.
+                                  % This command does not take effect until the next page
+                                  % so it should come on the page before the last. Make
+                                  % sure that you do not shorten the textheight too much.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{APPENDIX}
+
+Some of the additional graphs that are generated during the experiments are reported here. 
+
+
+\section*{ACKNOWLEDGMENT}
+
+The preferred spelling of the word �acknowledgment� in America is without an �e� after the �g�. Avoid the stilted expression, �One of us (R. B. G.) thanks . . .�  Instead, try �R. B. G. thanks�. Put sponsor acknowledgments in the unnumbered footnote on the first page.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+References are important to the reader; therefore, each citation must be complete and correct. If at all possible, references should be commonly available publications.
+
+
+\bibliographystyle{IEEEtran}
+\bibliography{IEEEabrv,references}
+
+%\begin{thebibliography}{99}
+%\bibitem{c1} G. O. Young, Synthetic structure of industrial plastics (Book style with paper title and editor), 	in Plastics, 2nd ed. vol. 3, J. Peters, Ed.  New York: McGraw-Hill, 1964, pp. 15-64.
+%\bibitem{c2} W.-K. Chen, Linear Networks and Systems (Book style).	Belmont, CA: Wadsworth, 1993, pp. 123�135.
+%\end{thebibliography}
+
+
+
+
+\end{document}
