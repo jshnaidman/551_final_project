@@ -1,0 +1,17 @@
+Synthetic example:
+Betas - 0.9,0.99 
+Epsilon - 1e-8
+Stochastic - Learning rate of 5e-4 / no adjusted learning rate / 
+Modulo - Learning rate of 1 / Adjusted Learning Rate
+
+
+Neural Net:
+Amsgrad:
+lr=1e-4, betas=(0.9,0.99) achieved 97.25 validation accuracy
+lr=5e-4, betas=(0.9,0.995) achieved 97.4 validation accuracy
+
+Adam: 
+lr=5e-4, betas=(0.9,0.995) achieved 97.21 validation accuracy
+lr=5e-4, betas=(0.9,0.995) achieved a 97.18 validation accuracy
+
+
