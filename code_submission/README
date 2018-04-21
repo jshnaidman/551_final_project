@@ -1,0 +1,5 @@
+The code for the synthetic experiments is contained in a jupyter notebook in the /synthetic_experiments folder. It should be ran locally with the appropriate libraries installed.
+
+The other experiments are contained in jupyter notebooks as well, but they should be uploaded to google colab first to be ran. They are contained in the /colabs folder.
+
+The code for the implementation of Amsgrad is contained in amsgrad.py
